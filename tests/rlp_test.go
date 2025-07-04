@@ -1,4 +1,5 @@
 // Copyright 2015 The go-ethereum Authors
+//
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -20,12 +21,16 @@ import (
 	"testing"
 )
 
+// TestRLP runs all RLP encoding/decoding tests.
 func TestRLP(t *testing.T) {
 	t.Parallel()
+
 	tm := new(testMatcher)
+
 	tm.walk(t, rlpTestDir, func(t *testing.T, name string, test *RLPTest) {
+		t.Helper() // Mark this helper for clearer error traces
 		if err := tm.checkFailure(t, test.Run()); err != nil {
-			t.Error(err)
+			t.Errorf("RLP test %q failed: %v", name, err)
 		}
 	})
 }
