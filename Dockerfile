@@ -1,33 +1,49 @@
-# Support setting various labels on the final image
+# syntax=docker/dockerfile:1.4
+
+# Optional build arguments for metadata
 ARG COMMIT=""
 ARG VERSION=""
 ARG BUILDNUM=""
 
-# Build Geth in a stock Go builder container
+# Use an explicit version for reproducibility
 FROM golang:1.24-alpine AS builder
 
+# Install build dependencies
 RUN apk add --no-cache gcc musl-dev linux-headers git
 
-# Get dependencies - will also be cached if we won't change go.mod/go.sum
-COPY go.mod /go-ethereum/
-COPY go.sum /go-ethereum/
-RUN cd /go-ethereum && go mod download
+# Set working directory
+WORKDIR /go-ethereum
 
-ADD . /go-ethereum
-RUN cd /go-ethereum && go run build/ci.go install -static ./cmd/geth
+# Copy go.mod and go.sum first for better layer caching
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Pull Geth into a second stage deploy alpine container
+# Copy the rest of the source code
+COPY . .
+
+# Build geth binary statically
+RUN go run build/ci.go install -static ./cmd/geth
+
+# Final minimal image
 FROM alpine:latest
 
+# Install runtime dependencies
 RUN apk add --no-cache ca-certificates
-COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
 
+# Copy geth binary from builder
+COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/geth
+
+# Expose common Ethereum ports
 EXPOSE 8545 8546 30303 30303/udp
-ENTRYPOINT ["geth"]
 
-# Add some metadata labels to help programmatic image consumption
+# Metadata labels
 ARG COMMIT=""
 ARG VERSION=""
 ARG BUILDNUM=""
+LABEL org.opencontainers.image.source="https://github.com/YOUR_GITHUB_REPO" \
+      org.opencontainers.image.revision="${COMMIT}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.build_number="${BUILDNUM}"
 
-LABEL commit="$COMMIT" version="$VERSION" buildnum="$BUILDNUM"
+# Default entrypoint
+ENTRYPOINT ["geth"]
